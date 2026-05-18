@@ -21,7 +21,6 @@ jobs:
         run: |
           mkdir -p out
           find 00000 -name "*.java" > sources.txt
-          cat sources.txt
           javac -source 1.4 -target 1.4 \
             -classpath "00000/org/bdj/rt.jar:00000/org/bdj/bdjstack.jar" \
             -d out @sources.txt
@@ -45,7 +44,7 @@ jobs:
           print("Done")
           EOF
 
-      - name: Package & Sign
+      - name: Package JAR
         run: |
           cp 00000/org/bdj/rt.jar out/org/bdj/
           cp 00000/org/bdj/bdjstack.jar out/org/bdj/
@@ -53,15 +52,35 @@ jobs:
           printf 'Manifest-Version: 1.0\nMIDlet-1: InitXlet,,org.bdj.InitXlet\n' > mf.mf
           mkdir -p dist
           cd out && jar cfm ../dist/00000.jar ../mf.mf . && cd ..
-          keytool -genkeypair -alias SIG-BD00 -keyalg RSA -keysize 2048 \
-            -dname "CN=0x56789abc,O=D4nzxml,C=ID" \
-            -keystore bdj.jks -storepass bdj12345 -keypass bdj12345 -validity 3650
+
+      - name: Generate Certificate
+        run: |
+          openssl genrsa -out private.pem 1024
+          openssl req -new -x509 \
+            -key private.pem \
+            -out app.discroot.crt \
+            -days 36500 -sha1 \
+            -subj "/CN=Studio/OU=Codesigning Department/O=BDJCompany.56789abc/C=US"
+          openssl x509 -in app.discroot.crt -out app.discroot.der -outform DER
+
+      - name: Sign JAR
+        run: |
+          openssl pkcs12 -export \
+            -in app.discroot.crt -inkey private.pem \
+            -out bdj.p12 -name "SIG-BD00" -passout pass:bdj12345
+          keytool -importkeystore \
+            -srckeystore bdj.p12 -srcstoretype PKCS12 -srcstorepass bdj12345 \
+            -destkeystore bdj.jks -deststorepass bdj12345 -noprompt
           jarsigner -keystore bdj.jks -storepass bdj12345 \
             -sigfile SIG-BD00 -digestalg SHA1 -sigalg SHA1withRSA \
             dist/00000.jar SIG-BD00
+          echo "✅ Signed OK"
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: 00000-signed
-          path: dist/00000.jar
+          name: bdj-build
+          path: |
+            dist/00000.jar
+            app.discroot.crt
+            app.discroot.der
