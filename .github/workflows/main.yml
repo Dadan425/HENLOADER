@@ -20,10 +20,10 @@ jobs:
       - name: Compile
         run: |
           mkdir -p out
-          find . -name "*.java" -not -path "./.github/*" > sources.txt
+          find 00000 -name "*.java" > sources.txt
           cat sources.txt
           javac -source 1.4 -target 1.4 \
-            -classpath "$(find . -name 'rt.jar' | head -1):$(find . -name 'bdjstack.jar' | head -1)" \
+            -classpath "00000/org/bdj/rt.jar:00000/org/bdj/bdjstack.jar" \
             -d out @sources.txt
 
       - name: Downgrade ke 1.3
@@ -47,9 +47,9 @@ jobs:
 
       - name: Package & Sign
         run: |
-          cp $(find . -name 'rt.jar' | head -1) out/org/bdj/
-          cp $(find . -name 'bdjstack.jar' | head -1) out/org/bdj/
-          cp $(find . -name 'bluray.InitXlet.perm' | head -1) out/org/bdj/
+          cp 00000/org/bdj/rt.jar out/org/bdj/
+          cp 00000/org/bdj/bdjstack.jar out/org/bdj/
+          cp 00000/org/bdj/bluray.InitXlet.perm out/org/bdj/
           printf 'Manifest-Version: 1.0\nMIDlet-1: InitXlet,,org.bdj.InitXlet\n' > mf.mf
           mkdir -p dist
           cd out && jar cfm ../dist/00000.jar ../mf.mf . && cd ..
