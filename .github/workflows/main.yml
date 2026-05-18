@@ -1,0 +1,67 @@
+name: Build BD-J
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      - name: Compile
+        run: |
+          mkdir -p out
+          find . -name "*.java" -not -path "./.github/*" > sources.txt
+          cat sources.txt
+          javac -source 1.4 -target 1.4 \
+            -classpath "$(find . -name 'rt.jar' | head -1):$(find . -name 'bdjstack.jar' | head -1)" \
+            -d out @sources.txt
+
+      - name: Downgrade ke 1.3
+        run: |
+          python3 << 'EOF'
+          import os, struct
+          def downgrade(data):
+              if data[:4] != b'\xca\xfe\xba\xbe': return data
+              if struct.unpack('>H', data[6:8])[0] == 48:
+                  data = bytearray(data); data[7] = 47
+                  return bytes(data)
+              return data
+          for r,d,files in os.walk('out'):
+              for f in files:
+                  p = os.path.join(r,f)
+                  with open(p,'rb') as x: b = x.read()
+                  if f.endswith('.class'): b = downgrade(b)
+                  with open(p,'wb') as x: x.write(b)
+          print("Done")
+          EOF
+
+      - name: Package & Sign
+        run: |
+          cp $(find . -name 'rt.jar' | head -1) out/org/bdj/
+          cp $(find . -name 'bdjstack.jar' | head -1) out/org/bdj/
+          cp $(find . -name 'bluray.InitXlet.perm' | head -1) out/org/bdj/
+          printf 'Manifest-Version: 1.0\nMIDlet-1: InitXlet,,org.bdj.InitXlet\n' > mf.mf
+          mkdir -p dist
+          cd out && jar cfm ../dist/00000.jar ../mf.mf . && cd ..
+          keytool -genkeypair -alias SIG-BD00 -keyalg RSA -keysize 2048 \
+            -dname "CN=0x56789abc,O=D4nzxml,C=ID" \
+            -keystore bdj.jks -storepass bdj12345 -keypass bdj12345 -validity 3650
+          jarsigner -keystore bdj.jks -storepass bdj12345 \
+            -sigfile SIG-BD00 -digestalg SHA1 -sigalg SHA1withRSA \
+            dist/00000.jar SIG-BD00
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: 00000-signed
+          path: dist/00000.jar
